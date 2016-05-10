@@ -9,7 +9,7 @@
     using System.Net.Http;
     using System.Net.Http.Headers;
     using System.Text;
-
+    using System.Text.RegularExpressions;
     class LectureGroup
     {
         public string Name { get; set; }
@@ -18,7 +18,6 @@
 
     class LectureGroupItem
     {
-
         public string Name { get; set; }
 
         public string ProtectedUrl { get; set; }
@@ -44,27 +43,76 @@
             }
             else
             {
-                List<string> courses = GetCourses(cookieJar).ToList();
-                foreach (var course in courses)
+                // V2 courses logic
+                string userID = GetUserID(cookieJar);
+                List<string> courseIDs = GetCourseIDs(cookieJar, userID);
+                foreach (var courseId in courseIDs)
                 {
-                    //if (course.Contains("compneuro-002"))
-                    {
-                        if (LoginCourse(cookieJar, course))
-                        {
-                            var lectureGroups = GetLecturePage(cookieJar, course);
-                            foreach (var lectureGroup in lectureGroups)
-                            {
-                                Console.WriteLine("  " + lectureGroup.Name);
-                                foreach (var lectureGroupItem in lectureGroup.Items)
-                                {
-                                    Console.WriteLine("    " + lectureGroupItem.Name);
-                                    Console.WriteLine("    " + lectureGroupItem.UnprotectedUrl);
-                                    return;
-                                }
-                            }
-                        }
-                    }
+                    var courseData = GetCourseData(cookieJar, courseId);
                 }
+
+                //List<string> courses = GetCourses(cookieJar).ToList();
+                //foreach (var course in courses)
+                //{
+                //    //if (course.Contains("compneuro-002"))
+                //    {
+                //        if (LoginCourse(cookieJar, course))
+                //        {
+                //            var lectureGroups = GetLecturePage(cookieJar, course);
+                //            foreach (var lectureGroup in lectureGroups)
+                //            {
+                //                Console.WriteLine("  " + lectureGroup.Name);
+                //                foreach (var lectureGroupItem in lectureGroup.Items)
+                //                {
+                //                    Console.WriteLine("    " + lectureGroupItem.Name);
+                //                    Console.WriteLine("    " + lectureGroupItem.UnprotectedUrl);
+                //                    return;
+                //                }
+                //            }
+                //        }
+                //    }
+                //}
+            }
+        }
+
+        private static object GetCourseData(CookieContainer cookieJar, string courseID)
+        {
+            // This give the slug and the photo URL, a relatively simple data structure
+            //string courseDataJson = GetCourseraData(cookieJar, string.Format("https://www.coursera.org/api/courses.v1/{0}?fields=photoUrl", courseID));
+            //return courseDataJson;
+
+            // This gives a complicated object graph, but at the end of the day we have module -> lesson -> video structure that is compatible with what we used to have.
+            string courseDataJson = GetCourseraData(cookieJar, "http://www.coursera.org/api/onDemandCourseMaterials.v1/?q=slug&slug=build-a-computer&includes=moduleIds%2clessonIds%2citemIds%2cvideos&fields=moduleIds%2conDemandCourseMaterialModules.v1(name%2cslug%2cdescription%2ctimeCommitment%2clessonIds%2coptional)%2conDemandCourseMaterialLessons.v1(name%2cslug%2ctimeCommitment%2citemIds%2coptional%2ctrackId)%2conDemandCourseMaterialItems.v1(name%2cslug%2ctimeCommitment%2ccontent%2cisLocked%2clockableByItem%2citemLockedReasonCode%2ctrackId)&showLockedItems=true");
+            return courseDataJson;
+        }
+
+        private static List<string> GetCourseIDs(CookieContainer cookieJar, string userID)
+        {
+            string courseIdListJson = GetCourseraData(cookieJar, string.Format("https://www.coursera.org/api/openCourseMemberships.v1/?q=findByUser&userId={0}", userID));
+            JObject courseIdListObject = Newtonsoft.Json.JsonConvert.DeserializeObject<JObject>(courseIdListJson);
+            JArray elements = (JArray)courseIdListObject["elements"];
+            List<string> courseIDs = new List<string>();
+            foreach (var element in elements)
+            {
+                var id = element["courseId"];
+                courseIDs.Add(id.ToString());
+            }
+
+            return courseIDs;
+        }
+
+        private static string GetUserID(CookieContainer cookieJar)
+        {
+            string signinPageContent = GetCourseraData(cookieJar, "https://accounts.coursera.org/signin");
+            Regex userIdMatcher = new Regex("&quot;id&quot;:([^,]*),");
+            Match match = userIdMatcher.Match("&quot;id&quot;:19210716,");
+            if (match.Success)
+            {
+                return match.Groups[1].ToString();
+            }
+            else
+            {
+                throw new Exception("Cannot parse signin page");
             }
         }
 
@@ -109,6 +157,41 @@
             return false;
         }
 
+        private static string GetCourseraData(CookieContainer cookieJar, string url)
+        {
+            using (HttpMessageHandler handler = new HttpClientHandler { AllowAutoRedirect = true, UseCookies = true, CookieContainer = cookieJar })
+            {
+                using (HttpClient client = new HttpClient(handler))
+                {
+                    var headers = new Dictionary<string, string>
+                    {
+                        { "User-Agent", @"Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.22 (KHTML, like Gecko) Chrome/25.0.1364.97 Safari/537.22" },
+                        { "Referer", "https://www.coursera.org/"},
+                    };
+                    HttpRequestMessage request = new HttpRequestMessage();
+                    request.RequestUri = new Uri(url);
+                    request.Method = HttpMethod.Get;
+                    foreach (var kvp in headers)
+                    {
+                        switch (kvp.Key.ToUpperInvariant())
+                        {
+                            case "HOST":
+                                request.Headers.Host = kvp.Value;
+                                break;
+                            case "REFERER":
+                                request.Headers.Referrer = new Uri(kvp.Value);
+                                break;
+                            default:
+                                request.Headers.Add(kvp.Key, kvp.Value);
+                                break;
+                        }
+                    }
+
+                    return client.SendAsync(request).Result.Content.ReadAsStringAsync().Result;
+                }
+            }
+        }
+
         private static IEnumerable<string> GetCourses(CookieContainer cookieJar)
         {
             using (HttpMessageHandler handler = new HttpClientHandler { AllowAutoRedirect = true, UseCookies = true, CookieContainer = cookieJar })
@@ -124,6 +207,8 @@
 
                     /* Look up the signed in URL to find userId */
 
+                    request.RequestUri = new Uri("https://accounts.coursera.org/signin");
+
                     /* This give us a set of ids */
                     // request.RequestUri = new Uri("https://www.coursera.org/api/openCourseMemberships.v1/?q=findByUser&userId=19210716");
                     /*
@@ -135,7 +220,7 @@
                     /* This allow us to build a mapping between id to slug */
                     // request.RequestUri = new Uri("https://www.coursera.org/api/courses.v1");
 
-                    request.RequestUri = new Uri("https://www.coursera.org/api/courses.v1?fields=photoUrl,homelink&q=slugh&slug=physiology");
+                    // request.RequestUri = new Uri("https://www.coursera.org/api/courses.v1?fields=photoUrl,homelink&q=slugh&slug=physiology");
 
                     request.Method = HttpMethod.Get;
                     foreach (var kvp in headers)
