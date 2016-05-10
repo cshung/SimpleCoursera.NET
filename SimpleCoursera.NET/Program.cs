@@ -25,16 +25,26 @@
         public string UnprotectedUrl { get; set; }
     }
 
+    class Course
+    {
+        public string Name { get; set; }
+        public string Slug { get; set; }
+        public string PhotoUrl { get; set; }
+    }
+
     class Program
     {
         private static Random random = new Random();
 
         private static void Main(string[] args)
         {
-            Console.Write("Username: ");
-            string email = Console.ReadLine();
-            Console.Write("Password: ");
-            string password = Console.ReadLine();
+            //Console.Write("Username: ");
+            //string email = Console.ReadLine();
+            //Console.Write("Password: ");
+            //string password = Console.ReadLine();
+
+            string email = "diu.9.geogebra@gmail.com";
+            string password = "darigold";
 
             var cookieJar = Login(email, password);
             if (cookieJar == null)
@@ -45,45 +55,99 @@
             {
                 // V2 courses logic
                 string userID = GetUserID(cookieJar);
+                Console.WriteLine(userID);
                 List<string> courseIDs = GetCourseIDs(cookieJar, userID);
                 foreach (var courseId in courseIDs)
                 {
-                    var courseData = GetCourseData(cookieJar, courseId);
+                    var course = GetCourse(cookieJar, courseId);
+                    Console.WriteLine(course.Name);
+                    Console.WriteLine(course.Slug);
+                    Console.WriteLine(course.PhotoUrl);
+                    GetCourseMaterials(cookieJar, course.Slug);
                 }
 
-                //List<string> courses = GetCourses(cookieJar).ToList();
-                //foreach (var course in courses)
-                //{
-                //    //if (course.Contains("compneuro-002"))
-                //    {
-                //        if (LoginCourse(cookieJar, course))
-                //        {
-                //            var lectureGroups = GetLecturePage(cookieJar, course);
-                //            foreach (var lectureGroup in lectureGroups)
-                //            {
-                //                Console.WriteLine("  " + lectureGroup.Name);
-                //                foreach (var lectureGroupItem in lectureGroup.Items)
-                //                {
-                //                    Console.WriteLine("    " + lectureGroupItem.Name);
-                //                    Console.WriteLine("    " + lectureGroupItem.UnprotectedUrl);
-                //                    return;
-                //                }
-                //            }
-                //        }
-                //    }
-                //}
+                List<string> courses = GetCourses(cookieJar).ToList();
+                foreach (var course in courses)
+                {
+                    //if (course.Contains("compneuro-002"))
+                    {
+                        if (LoginCourse(cookieJar, course))
+                        {
+                            var lectureGroups = GetLecturePage(cookieJar, course);
+                            foreach (var lectureGroup in lectureGroups)
+                            {
+                                Console.WriteLine("  " + lectureGroup.Name);
+                                foreach (var lectureGroupItem in lectureGroup.Items)
+                                {
+                                    Console.WriteLine("    " + lectureGroupItem.Name);
+                                    Console.WriteLine("    " + lectureGroupItem.UnprotectedUrl);
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
-        private static object GetCourseData(CookieContainer cookieJar, string courseID)
+        private static void GetCourseMaterials(CookieContainer cookieJar, string slug)
         {
-            // This give the slug and the photo URL, a relatively simple data structure
-            //string courseDataJson = GetCourseraData(cookieJar, string.Format("https://www.coursera.org/api/courses.v1/{0}?fields=photoUrl", courseID));
-            //return courseDataJson;
+            //// This gives a complicated object graph, but at the end of the day we have module -> lesson -> video structure that is compatible with what we used to have.
+            string courseMaterialsJson = GetCourseraData(cookieJar, string.Format("http://www.coursera.org/api/onDemandCourseMaterials.v1/?q=slug&slug={0}&includes=moduleIds%2clessonIds%2citemIds%2cvideos&fields=moduleIds%2conDemandCourseMaterialModules.v1(name%2cslug%2cdescription%2ctimeCommitment%2clessonIds%2coptional)%2conDemandCourseMaterialLessons.v1(name%2cslug%2ctimeCommitment%2citemIds%2coptional%2ctrackId)%2conDemandCourseMaterialItems.v1(name%2cslug%2ctimeCommitment%2ccontent%2cisLocked%2clockableByItem%2citemLockedReasonCode%2ctrackId)&showLockedItems=true", slug));
+            JObject courseMaterialsObject = Newtonsoft.Json.JsonConvert.DeserializeObject<JObject>(courseMaterialsJson);
+            JObject linked = (JObject)courseMaterialsObject["linked"];
 
-            // This gives a complicated object graph, but at the end of the day we have module -> lesson -> video structure that is compatible with what we used to have.
-            string courseDataJson = GetCourseraData(cookieJar, "http://www.coursera.org/api/onDemandCourseMaterials.v1/?q=slug&slug=build-a-computer&includes=moduleIds%2clessonIds%2citemIds%2cvideos&fields=moduleIds%2conDemandCourseMaterialModules.v1(name%2cslug%2cdescription%2ctimeCommitment%2clessonIds%2coptional)%2conDemandCourseMaterialLessons.v1(name%2cslug%2ctimeCommitment%2citemIds%2coptional%2ctrackId)%2conDemandCourseMaterialItems.v1(name%2cslug%2ctimeCommitment%2ccontent%2cisLocked%2clockableByItem%2citemLockedReasonCode%2ctrackId)&showLockedItems=true");
-            return courseDataJson;
+            // Module id to name map
+            var moduleMap = new Dictionary<string, string>();
+            JArray modules = (JArray)linked["onDemandCourseMaterialModules.v1"];
+            foreach (var module in modules)
+            {
+                moduleMap.Add(module["id"].ToString(), module["name"].ToString());
+            }
+
+            // Item id to name,moduleName map
+            var itemMap = new Dictionary<string, Tuple<string, string>>();
+            JArray items = (JArray)linked["onDemandCourseMaterialItems.v1"];
+            foreach (var item in items)
+            {
+                string itemId = item["id"].ToString();
+                string itemName = item["name"].ToString();
+                string moduleId = item["moduleId"].ToString();
+                string moduleName = moduleMap[moduleId];
+                itemMap.Add(itemId, Tuple.Create(itemName, moduleName));
+            }
+
+            JArray videos = (JArray)linked["onDemandVideos.v1"];
+            foreach (var video in videos)
+            {
+                string itemId = video["id"].ToString();
+                string url = (((JObject)((JObject)(((JObject)video["sources"])["byResolution"]))["360p"])["mp4VideoUrl"]).ToString();
+                Tuple<string, string> item = itemMap[itemId];
+                string itemName = item.Item1;
+                string moduleName = item.Item2;
+
+                Console.WriteLine("  " + moduleName);
+                Console.WriteLine("  " + itemName);
+                Console.WriteLine("  " + url);
+                Console.WriteLine();
+            }
+
+            return;
+        }
+
+        private static Course GetCourse(CookieContainer cookieJar, string courseID)
+        {
+            string coursesJson = GetCourseraData(cookieJar, string.Format("https://www.coursera.org/api/courses.v1/{0}?fields=photoUrl", courseID));
+            JObject coursesObject = Newtonsoft.Json.JsonConvert.DeserializeObject<JObject>(coursesJson);
+            JArray elements = (JArray)coursesObject["elements"];
+            JObject element = (JObject)elements[0]; /* I am searching for exactly one course, so I expect exactly one element */
+
+            return new Course
+            {
+                Name = element["name"].ToString(),
+                Slug = element["slug"].ToString(),
+                PhotoUrl = element["photoUrl"].ToString(),
+            };
         }
 
         private static List<string> GetCourseIDs(CookieContainer cookieJar, string userID)
@@ -204,23 +268,7 @@
                         { "Referer", "https://www.coursera.org/"},
                     };
                     HttpRequestMessage request = new HttpRequestMessage();
-
-                    /* Look up the signed in URL to find userId */
-
-                    request.RequestUri = new Uri("https://accounts.coursera.org/signin");
-
-                    /* This give us a set of ids */
-                    // request.RequestUri = new Uri("https://www.coursera.org/api/openCourseMemberships.v1/?q=findByUser&userId=19210716");
-                    /*
-                     {"elements":[{"id":"19210716~ct7G8DVLEeWfzhKP8GtZlQ","userId":19210716,"courseId":"ct7G8DVLEeWfzhKP8GtZlQ","timestamp":1462654739986,"courseRole":"LEARNER"},{"id":"19210716~Tr9rK6JtEeSwKiIACiONVg","userId":19210716,"courseId":"Tr9rK6JtEeSwKiIACiONVg","timestamp":1462654990037,"courseRole":"LEARNER"}],"paging":null,"linked":null}
-                     */
-
-                    // ct7G8DVLEeWfzhKP8GtZlQ
-
-                    /* This allow us to build a mapping between id to slug */
-                    // request.RequestUri = new Uri("https://www.coursera.org/api/courses.v1");
-
-                    // request.RequestUri = new Uri("https://www.coursera.org/api/courses.v1?fields=photoUrl,homelink&q=slugh&slug=physiology");
+                    request.RequestUri = new Uri("https://www.coursera.org/maestro/api/topic/list_my");
 
                     request.Method = HttpMethod.Get;
                     foreach (var kvp in headers)
