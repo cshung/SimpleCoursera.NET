@@ -121,7 +121,22 @@
                         { "Referer", "https://www.coursera.org/"},
                     };
                     HttpRequestMessage request = new HttpRequestMessage();
-                    request.RequestUri = new Uri("https://www.coursera.org/maestro/api/topic/list_my");
+
+                    /* Look up the signed in URL to find userId */
+
+                    /* This give us a set of ids */
+                    // request.RequestUri = new Uri("https://www.coursera.org/api/openCourseMemberships.v1/?q=findByUser&userId=19210716");
+                    /*
+                     {"elements":[{"id":"19210716~ct7G8DVLEeWfzhKP8GtZlQ","userId":19210716,"courseId":"ct7G8DVLEeWfzhKP8GtZlQ","timestamp":1462654739986,"courseRole":"LEARNER"},{"id":"19210716~Tr9rK6JtEeSwKiIACiONVg","userId":19210716,"courseId":"Tr9rK6JtEeSwKiIACiONVg","timestamp":1462654990037,"courseRole":"LEARNER"}],"paging":null,"linked":null}
+                     */
+
+                    // ct7G8DVLEeWfzhKP8GtZlQ
+
+                    /* This allow us to build a mapping between id to slug */
+                    // request.RequestUri = new Uri("https://www.coursera.org/api/courses.v1");
+
+                    request.RequestUri = new Uri("https://www.coursera.org/api/courses.v1?fields=photoUrl,homelink&q=slugh&slug=physiology");
+
                     request.Method = HttpMethod.Get;
                     foreach (var kvp in headers)
                     {
