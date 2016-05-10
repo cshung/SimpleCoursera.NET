@@ -38,13 +38,10 @@
 
         private static void Main(string[] args)
         {
-            //Console.Write("Username: ");
-            //string email = Console.ReadLine();
-            //Console.Write("Password: ");
-            //string password = Console.ReadLine();
-
-            string email = "diu.9.geogebra@gmail.com";
-            string password = "darigold";
+            Console.Write("Username: ");
+            string email = Console.ReadLine();
+            Console.Write("Password: ");
+            string password = Console.ReadLine();
 
             var cookieJar = Login(email, password);
             if (cookieJar == null)
