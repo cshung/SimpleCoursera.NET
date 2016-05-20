@@ -63,27 +63,27 @@
                     GetCourseMaterials(cookieJar, course.Slug);
                 }
 
-                List<string> courses = GetCourses(cookieJar).ToList();
-                foreach (var course in courses)
-                {
-                    //if (course.Contains("compneuro-002"))
-                    {
-                        if (LoginCourse(cookieJar, course))
-                        {
-                            var lectureGroups = GetLecturePage(cookieJar, course);
-                            foreach (var lectureGroup in lectureGroups)
-                            {
-                                Console.WriteLine("  " + lectureGroup.Name);
-                                foreach (var lectureGroupItem in lectureGroup.Items)
-                                {
-                                    Console.WriteLine("    " + lectureGroupItem.Name);
-                                    Console.WriteLine("    " + lectureGroupItem.UnprotectedUrl);
-                                    return;
-                                }
-                            }
-                        }
-                    }
-                }
+                //List<string> courses = GetCourses(cookieJar).ToList();
+                //foreach (var course in courses)
+                //{
+                //    //if (course.Contains("compneuro-002"))
+                //    {
+                //        if (LoginCourse(cookieJar, course))
+                //        {
+                //            var lectureGroups = GetLecturePage(cookieJar, course);
+                //            foreach (var lectureGroup in lectureGroups)
+                //            {
+                //                Console.WriteLine("  " + lectureGroup.Name);
+                //                foreach (var lectureGroupItem in lectureGroup.Items)
+                //                {
+                //                    Console.WriteLine("    " + lectureGroupItem.Name);
+                //                    Console.WriteLine("    " + lectureGroupItem.UnprotectedUrl);
+                //                    return;
+                //                }
+                //            }
+                //        }
+                //    }
+                //}
             }
         }
 
@@ -101,32 +101,43 @@
             {
                 moduleMap.Add(module["id"].ToString(), module["name"].ToString());
             }
-
-            // Item id to name,moduleName map
-            var itemMap = new Dictionary<string, Tuple<string, string>>();
+            
             JArray items = (JArray)linked["onDemandCourseMaterialItems.v1"];
             foreach (var item in items)
             {
                 string itemId = item["id"].ToString();
                 string itemName = item["name"].ToString();
                 string moduleId = item["moduleId"].ToString();
+                JObject itemContent = (JObject)item["content"];
+                string itemContentTypeName = itemContent["typeName"].ToString();
+                if (itemContentTypeName.Equals("lecture"))
+                {
+                    JObject itemContentDefinition = (JObject)itemContent["definition"];
+                    string videoId = itemContentDefinition["videoId"].ToString();
+                    
+
+                    string videoJson = GetCourseraData(cookieJar, string.Format("http://www.coursera.org/api/opencourse.v1/video/{0}", videoId));
+                    JObject videoObject = Newtonsoft.Json.JsonConvert.DeserializeObject<JObject>(videoJson);
+                    JArray videoSources = (JArray)videoObject["sources"];
+                    foreach (var videoSourceToken in videoSources)
+                    {
+                        JObject videoSource = (JObject)videoSourceToken;
+                        string videoSourceResolution = videoSource["resolution"].ToString();
+                        if (videoSourceResolution.Equals("360p"))
+                        {
+                            JObject videoFormatSources = (JObject)videoSource["formatSources"];
+                            String videoUrl = videoFormatSources["video/mp4"].ToString();
+                            Console.WriteLine(moduleMap[moduleId]);
+                            Console.WriteLine(itemName);
+                            Console.WriteLine(videoUrl);
+                            break;
+                        }
+                    }
+
+                    Console.WriteLine();
+                }
+
                 string moduleName = moduleMap[moduleId];
-                itemMap.Add(itemId, Tuple.Create(itemName, moduleName));
-            }
-
-            JArray videos = (JArray)linked["onDemandVideos.v1"];
-            foreach (var video in videos)
-            {
-                string itemId = video["id"].ToString();
-                string url = (((JObject)((JObject)(((JObject)video["sources"])["byResolution"]))["360p"])["mp4VideoUrl"]).ToString();
-                Tuple<string, string> item = itemMap[itemId];
-                string itemName = item.Item1;
-                string moduleName = item.Item2;
-
-                Console.WriteLine("  " + moduleName);
-                Console.WriteLine("  " + itemName);
-                Console.WriteLine("  " + url);
-                Console.WriteLine();
             }
 
             return;
