@@ -38,6 +38,7 @@
 
         private static void Main(string[] args)
         {
+            GlobalProxySelection.Select = new WebProxy("127.0.0.1", 8888);
             Console.Write("Username: ");
             string email = Console.ReadLine();
             Console.Write("Password: ");
@@ -160,7 +161,7 @@
 
         private static List<string> GetCourseIDs(CookieContainer cookieJar, string userID)
         {
-            string courseIdListJson = GetCourseraData(cookieJar, string.Format("https://www.coursera.org/api/openCourseMemberships.v1/?q=findByUser&userId={0}", userID));
+            string courseIdListJson = GetCourseraData(cookieJar, @"https://api.coursera.org/api/memberships.v1?includes=courseId,courses.v1&q=me&showHidden=true&filter=current,preEnrolled HTTP/1.1");
             JObject courseIdListObject = Newtonsoft.Json.JsonConvert.DeserializeObject<JObject>(courseIdListJson);
             JArray elements = (JArray)courseIdListObject["elements"];
             List<string> courseIDs = new List<string>();
@@ -326,11 +327,11 @@
                         { "X-CSRF2-Token", csrfToken2 },
                         { "X-Requested-With", "XMLHttpRequest" },
                     };
-                    // headers.Add("Origin", "https://accounts.coursera.org");
-                    headers.Add("Host", "accounts.coursera.org");
-                    headers.Add("Referer", "https://accounts.coursera.org/signin?mode=signin&post_redirect=%2F");
+                    // headers.Add("Origin", "https://api.coursera.org");
+                    headers.Add("Host", "api.coursera.org");
+                    headers.Add("Referer", "https://api.coursera.org/signin?mode=signin&post_redirect=%2F");
                     HttpRequestMessage request = new HttpRequestMessage();
-                    request.RequestUri = new Uri("https://accounts.coursera.org/api/v1/login");
+                    request.RequestUri = new Uri("https://api.coursera.org/api/login/v3");
                     request.Method = HttpMethod.Post;
                     request.Content = new StringContent(data);
                     request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/x-www-form-urlencoded");
