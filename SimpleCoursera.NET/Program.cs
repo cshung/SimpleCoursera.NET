@@ -38,7 +38,8 @@
 
         private static void Main(string[] args)
         {
-            GlobalProxySelection.Select = new WebProxy("127.0.0.1", 8888);
+            // Enable this for Fiddler capture only
+            // GlobalProxySelection.Select = new WebProxy("127.0.0.1", 8888);
             Console.Write("Username: ");
             string email = Console.ReadLine();
             Console.Write("Password: ");
